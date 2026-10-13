@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import top.aole.vend.common.result.R;
 import top.aole.vend.modules.purchase.service.PurchaseImportService;
+import top.aole.vend.modules.purchase.service.PurchasePhotoPreviewService;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
@@ -15,6 +16,12 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class PurchaseImportController {
     private final PurchaseImportService service;
+    private final PurchasePhotoPreviewService photoService;
+
+    @PostMapping("/receipt/photo-preview")
+    public R<PurchasePhotoPreviewService.Preview> photoPreview(@RequestParam("file") MultipartFile file) {
+        return R.ok(photoService.preview(file));
+    }
 
     @PostMapping("/{kind}/preview")
     public R<PurchaseImportService.Preview> preview(@PathVariable String kind, @RequestParam("file") MultipartFile file) {
