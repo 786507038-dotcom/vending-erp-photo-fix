@@ -70,7 +70,9 @@ class PurchaseFlowTest extends BaseIntegrationTest {
     void importedListsUseExistingDraftAndConfirmationFlow() throws Exception {
         for (String kind : new String[]{"receipt", "order"}) {
             org.springframework.mock.web.MockHttpServletResponse response = new org.springframework.mock.web.MockHttpServletResponse();
-            new top.aole.vend.modules.purchase.interfaces.PurchaseImportController(importService).template(kind, response);
+            new top.aole.vend.modules.purchase.interfaces.PurchaseImportController(importService,
+                    org.mockito.Mockito.mock(top.aole.vend.modules.purchase.service.PurchasePhotoPreviewService.class))
+                    .template(kind, response);
             byte[] content;
             try (org.apache.poi.ss.usermodel.Workbook book = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(response.getContentAsByteArray()));
                  java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {

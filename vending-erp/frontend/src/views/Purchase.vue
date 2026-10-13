@@ -3,7 +3,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ProductSelect from '@/components/basedata/ProductSelect.vue'
 import PurchaseImportDialog from '@/components/purchase/PurchaseImportDialog.vue'
-import type { PurchaseImportKind, PurchaseImportLine } from '@/api/purchase'
+import PurchasePhotoImportDialog from '@/components/purchase/PurchasePhotoImportDialog.vue'
+import type { PurchaseImportKind, PurchaseImportLine, PurchasePhotoDraft } from '@/api/purchase'
 import RedFlushDialog from '@/components/doc/RedFlushDialog.vue'
 import CostAdjustDialog from '@/components/doc/CostAdjustDialog.vue'
 import DocDetailDrawer from '@/components/doc/DocDetailDrawer.vue'
@@ -25,6 +26,7 @@ import {
 
 // Excel 校验通过后回填已有录单表单，保存与过账仍走原有接口。
 const importVisible = ref(false)
+const photoImportVisible = ref(false)
 const importKind = ref<PurchaseImportKind>('receipt')
 function openImport(kind: PurchaseImportKind) {
   importKind.value = kind
@@ -47,6 +49,32 @@ function applyImport(rows: PurchaseImportLine[]) {
     poForm.items = rows.map((r) => ({
       productId: r.productId, qtyOrdered: Number(r.qty), unitPrice: r.unitPrice == null ? null : Number(r.unitPrice), hint: null,
     }))
+  }
+}
+
+async function applyPhotoImport(draft: PurchasePhotoDraft) {
+  quickReceive()
+  receiveForm.supplierId = draft.supplierId
+  receiveForm.bizDate = draft.bizDate
+  receiveForm.remark = draft.documentNo ? `拿货单号：${draft.documentNo}` : '拍照识别拿货单，已人工核对'
+  receiveForm.rows = draft.rows.map((line) => ({
+    productId: line.productId, sourceName: line.sourceName || undefined,
+    expectQty: null, qty: line.qty, unitPrice: line.unitPrice,
+    poItemId: null, hint: null,
+    boxSpec: line.boxSpec, boxCount: line.boxCount,
+    boxPrice: line.boxPrice, importedTotal: line.totalPrice,
+  }))
+  receiveSaving.value = true
+  try {
+    const detail = await createReceipt(buildReceiptPayload())
+    receiveDocId.value = detail.head.id
+    receiveDocNo.value = detail.head.docNo
+    ElMessage.success('已生成入库草稿；确认入库前库存不会变化')
+    refreshReceipts()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '草稿保存失败，请在表单中重试')
+  } finally {
+    receiveSaving.value = false
   }
 }
 
@@ -201,6 +229,7 @@ interface ReceiveRow {
   productId: number | null
   productName?: string
   skuCode?: string
+  sourceName?: string
   expectQty: number | null
   qty: number | null
   unitPrice: number | null
@@ -435,10 +464,10 @@ onMounted(() => {
     <div class="ledger-crumb">园区小卖 ERP / 采购</div>
     <div class="ledger-title">
       <h2>采购 · 订货与入库</h2>
-      <span class="sub">按表格导入或直接录入到货商品，核对数量、价格后确认入库</span>
+      <span class="sub">拍照识别、按表格导入或直接录入；逐行核对后再确认入库</span>
     </div>
     <p class="ledger-note">
-      已有采购表格可点<b>「按表格导入」</b>，核对整件规格、件数和金额；也可点<b>「直接录入库」</b>手填。选供应商并确认后，库存和成本才会更新。先下单再收货，可用下方的<b>订货单</b>。
+      手写拿货单可点<b>「拍照识别」</b>逐行核对并生成草稿；采购表格可点<b>「按表格导入」</b>；也可<b>「直接录入库」</b>手填。确认入库后，库存和成本才会更新。先下单再收货，可用下方的<b>订货单</b>。
     </p>
 
     <!-- 编号流程条(设计七律#2) -->
@@ -455,6 +484,7 @@ onMounted(() => {
       <h3>
         📥 采购入库单 <span class="hint">确认后库存 +、加权成本更新;确认过的单不可改,只能红冲</span>
         <span style="margin-left: auto; display: flex; gap: 8px">
+          <el-button size="small" @click="photoImportVisible = true">📷 拍照识别</el-button>
           <el-button size="small" @click="openImport('receipt')">按表格导入</el-button>
           <el-button type="primary" size="small" @click="quickReceive">⚡ 直接录入库</el-button>
         </span>
@@ -626,7 +656,7 @@ onMounted(() => {
         </span>
       </template>
       <el-alert v-if="receiveForm.rows.some((row) => row.boxSpec != null)" type="info" :closable="false" show-icon style="margin-bottom: 12px">
-        已带入表格明细。整件规格和整件价格仅用于核对；库存按采购数量（基本单位）入账，金额按数量 × 单价计算。请选供应商，确认后才会入库。
+        已带入整件明细。整件规格和整件价格仅用于核对；库存按采购数量（基本单位）入账，金额按数量 × 单价计算。确认后才会入库。
       </el-alert>
       <div style="display: flex; gap: 14px; margin-bottom: 12px">
         <div style="flex: 1">
@@ -653,8 +683,9 @@ onMounted(() => {
             <td>
               <span v-if="row.poItemId">{{ row.skuCode }} · {{ row.productName }}</span>
               <ProductSelect v-else v-model="row.productId" @update:model-value="onReceiveProductChanged(row)" />
+              <div v-if="row.sourceName" class="mini">票面：{{ row.sourceName }}</div>
               <div v-if="row.boxSpec != null" class="mini" style="margin-top: 4px">
-                表格：{{ row.boxSpec }}/件 × {{ row.boxCount }} 件 · ¥{{ row.boxPrice }}/件 = ¥{{ Number(row.importedTotal).toFixed(2) }}
+                整件：{{ row.boxSpec }}/件 × {{ row.boxCount }} 件 · ¥{{ row.boxPrice }}/件 = ¥{{ Number(row.importedTotal).toFixed(2) }}
               </div>
             </td>
             <td v-if="receiveForm.purchaseOrderId"><span class="num">{{ row.expectQty ?? '—' }}</span></td>
@@ -766,6 +797,7 @@ onMounted(() => {
     />
 
     <PurchaseImportDialog v-model="importVisible" :kind="importKind" @import="applyImport" />
+    <PurchasePhotoImportDialog v-model="photoImportVisible" :suppliers="suppliers" @import="applyPhotoImport" />
 
     <!-- 通用单据详情抽屉(P2-3:入库单号点开即达) -->
     <DocDetailDrawer v-model="docDrawerVisible" :doc-id="docDrawerId" />

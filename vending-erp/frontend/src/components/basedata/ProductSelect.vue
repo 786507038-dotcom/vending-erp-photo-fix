@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { pageProducts, type Product } from '@/api/basedata'
+import { ref, watch } from 'vue'
+import { getProduct, pageProducts, type Product } from '@/api/basedata'
 
 /**
  * 商品远程搜索下拉:输入 名称/编码/条码 搜索,选中 emit 商品 id。
@@ -22,7 +22,9 @@ async function search(keyword: string) {
   loading.value = true
   try {
     const page = await pageProducts({ current: 1, size: 20, keyword: keyword || undefined })
-    options.value = page.records
+    const selected = options.value.find((p) => p.id === props.modelValue)
+    options.value = selected && !page.records.some((p) => p.id === selected.id)
+      ? [selected, ...page.records] : page.records
   } finally {
     loading.value = false
   }
@@ -34,6 +36,15 @@ function onChange(value: number | null) {
 
 // 初始载入一页,便于直接下拉选
 search('')
+watch(() => props.modelValue, async (id) => {
+  if (!id || options.value.some((p) => p.id === id)) return
+  try {
+    const product = await getProduct(id)
+    if (props.modelValue === id && !options.value.some((p) => p.id === id)) options.value.unshift(product)
+  } catch {
+    // 已删除的商品由父表单核对，不阻断其他商品选择。
+  }
+}, { immediate: true })
 </script>
 
 <template>

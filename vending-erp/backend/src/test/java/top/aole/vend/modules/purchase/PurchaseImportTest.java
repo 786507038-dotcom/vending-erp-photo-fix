@@ -149,7 +149,8 @@ class PurchaseImportTest {
     @Test void generatedTemplatesCanBeFilledAndParsed() throws Exception {
         for (String kind : new String[]{"order", "receipt"}) {
             MockHttpServletResponse response = new MockHttpServletResponse();
-            new PurchaseImportController(service).template(kind, response);
+            new PurchaseImportController(service, mock(top.aole.vend.modules.purchase.service.PurchasePhotoPreviewService.class))
+                    .template(kind, response);
             try (Workbook book = new XSSFWorkbook(new java.io.ByteArrayInputStream(response.getContentAsByteArray())); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
                 Row row = book.getSheetAt(0).createRow(1);
                 row.createCell(0).setCellValue("SP001");

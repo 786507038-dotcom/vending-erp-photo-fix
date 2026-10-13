@@ -254,6 +254,48 @@ export function previewPurchaseImport(kind: PurchaseImportKind, file: File): Pro
   data.append('file', file)
   return request.post(`/v1/purchase/import/${kind}/preview`, data)
 }
+
+export interface PurchasePhotoLine {
+  rowNo: number
+  sourceName: string | null
+  productId: number | null
+  productName: string | null
+  skuCode: string | null
+  boxSpec: number | null
+  unit: string | null
+  qty: number | null
+  unitPrice: number | null
+  sourceAmount: number | null
+  calculatedAmount: number | null
+  crossedOut: boolean
+  uncertain: boolean
+  warnings: string[]
+}
+export interface PurchasePhotoPreview {
+  documentNo: string | null
+  bizDate: string | null
+  supplierName: string | null
+  supplierId: number | null
+  declaredTotal: number | null
+  calculatedTotal: number
+  rows: PurchasePhotoLine[]
+  warnings: string[]
+}
+export interface PurchasePhotoDraft {
+  documentNo: string | null
+  bizDate: string
+  supplierId: number
+  declaredTotal: number | null
+  rows: Array<{
+    productId: number; sourceName: string | null; qty: number; unitPrice: number
+    boxSpec: number | null; boxCount: number | null; boxPrice: number | null; totalPrice: number
+  }>
+}
+export function previewPurchasePhoto(file: File): Promise<PurchasePhotoPreview> {
+  const data = new FormData()
+  data.append('file', file)
+  return request.post('/v1/purchase/import/receipt/photo-preview', data)
+}
 export function purchaseImportTemplate(kind: PurchaseImportKind): Promise<Blob> {
   return request.get(`/v1/purchase/import/${kind}/template`, { responseType: 'blob' })
 }
